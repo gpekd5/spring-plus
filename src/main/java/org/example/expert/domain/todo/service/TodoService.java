@@ -17,6 +17,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -25,6 +29,10 @@ public class TodoService {
     private final TodoRepository todoRepository;
     private final WeatherClient weatherClient;
 
+    //lv1_1.코드 개선 퀴즈 - @Transactional의 이해
+    //readOnly = true 전역 적용으로 오류 발생
+    //@Transactional 별도 지정
+    @Transactional
     public TodoSaveResponse saveTodo(AuthUser authUser, TodoSaveRequest todoSaveRequest) {
         User user = User.fromAuthUser(authUser);
 
@@ -47,10 +55,13 @@ public class TodoService {
         );
     }
 
-    public Page<TodoResponse> getTodos(int page, int size) {
+    public Page<TodoResponse> getTodos(int page, int size, String weather, LocalDate startDate, LocalDate endDate) {
         Pageable pageable = PageRequest.of(page - 1, size);
 
-        Page<Todo> todos = todoRepository.findAllByOrderByModifiedAtDesc(pageable);
+        LocalDateTime startDateTime = startDate == null ? null : startDate.atStartOfDay();
+        LocalDateTime endDateTime = endDate == null ? null : endDate.atTime(LocalTime.MAX);
+
+        Page<Todo> todos = todoRepository.findAllByOrderByModifiedAtDesc(pageable, weather, startDateTime, endDateTime);
 
         return todos.map(todo -> new TodoResponse(
                 todo.getId(),

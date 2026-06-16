@@ -17,4 +17,6 @@ public class SignupRequest {
     private String password;
     @NotBlank
     private String userRole;
+    @NotBlank (message = "nickname은 필수입니다.")
+    private String nickname;
 }
