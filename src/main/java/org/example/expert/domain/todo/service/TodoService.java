@@ -25,6 +25,10 @@ public class TodoService {
     private final TodoRepository todoRepository;
     private final WeatherClient weatherClient;
 
+    //lv1_1.코드 개선 퀴즈 - @Transactional의 이해
+    //readOnly = true 전역 적용으로 오류 발생
+    //@Transactional 별도 지정
+    @Transactional
     public TodoSaveResponse saveTodo(AuthUser authUser, TodoSaveRequest todoSaveRequest) {
         User user = User.fromAuthUser(authUser);
 
