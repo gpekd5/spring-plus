@@ -1,4 +1,4 @@
-package org.example.expert.domain.comment.dto.response;
+package org.example.expert.domain.common.dto;
 
 import lombok.Getter;
 import org.springframework.http.HttpStatus;
