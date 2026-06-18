@@ -1,0 +1,1806 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Todo Wave</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
+
+  <style>
+    :root {
+      --blue-950:#1234c9;
+      --blue-900:#1f55ff;
+      --blue-800:#2865ff;
+      --blue-700:#3b7cff;
+      --blue-100:#edf4ff;
+      --blue-50:#f6f9ff;
+      --white:#ffffff;
+      --text:#172033;
+      --sub:#54627d;
+      --muted:#8490a8;
+      --line:rgba(55,83,140,.14);
+      --danger:#ff4d5f;
+      --green:#2cc987;
+      --shadow:0 24px 70px rgba(31,85,255,.22);
+      --soft:0 14px 40px rgba(25,45,90,.12);
+    }
+
+    * { box-sizing:border-box; margin:0; padding:0; }
+
+    body {
+      height:100vh;
+      overflow:hidden;
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Pretendard","Apple SD Gothic Neo",sans-serif;
+      color:var(--text);
+      background:
+              radial-gradient(circle at 18% 8%, rgba(255,255,255,.42), transparent 25%),
+              radial-gradient(circle at 82% 12%, rgba(255,255,255,.22), transparent 24%),
+              linear-gradient(135deg,#3f7cff 0%,#2f68ff 42%,#1f55ff 100%);
+    }
+
+    button, input, textarea, select { font:inherit; }
+    button { cursor:pointer; border:0; }
+
+    .page {
+      height:100vh;
+      padding:26px;
+      display:grid;
+      grid-template-rows:auto 1fr;
+      gap:20px;
+    }
+
+    .topbar {
+      max-width:1380px;
+      width:100%;
+      margin:0 auto;
+      color:#fff;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:20px;
+    }
+
+    .brand { display:flex; align-items:center; gap:14px; }
+
+    .logo {
+      width:54px; height:54px; border-radius:19px;
+      background:rgba(255,255,255,.18);
+      position:relative; overflow:hidden;
+      box-shadow:inset 0 1px 1px rgba(255,255,255,.35),0 16px 32px rgba(0,0,0,.14);
+      backdrop-filter:blur(18px);
+    }
+    .logo:before,.logo:after{
+      content:""; position:absolute; width:36px; height:52px;
+      background:linear-gradient(160deg,rgba(255,255,255,.98),rgba(222,236,255,.72));
+      box-shadow:0 10px 18px rgba(15,56,140,.18);
+    }
+    .logo:before{left:9px; top:1px; border-radius:100% 0 100% 100%; transform:rotate(38deg);}
+    .logo:after{right:6px; bottom:0; border-radius:100% 100% 100% 0; transform:rotate(38deg); opacity:.82;}
+
+    .brand h1 { font-size:27px; letter-spacing:-.9px; line-height:1; }
+    .brand p { margin-top:7px; color:rgba(255,255,255,.78); font-size:14px; }
+
+    .top-actions { display:flex; align-items:center; gap:10px; }
+
+    .status-pill, .account-pill {
+      display:flex; align-items:center; gap:9px;
+      padding:11px 15px;
+      border-radius:999px;
+      background:rgba(255,255,255,.16);
+      border:1px solid rgba(255,255,255,.22);
+      backdrop-filter:blur(18px);
+      color:rgba(255,255,255,.94);
+      font-size:14px;
+      font-weight:700;
+    }
+
+    .status-dot {
+      width:9px; height:9px; border-radius:999px;
+      background:#ff7b7b;
+      box-shadow:0 0 0 5px rgba(255,123,123,.18);
+    }
+    .status-dot.on { background:#5dffbe; box-shadow:0 0 0 5px rgba(93,255,190,.18); }
+
+    .top-button {
+      padding:12px 16px;
+      border-radius:999px;
+      background:rgba(255,255,255,.92);
+      color:var(--blue-900);
+      font-weight:900;
+      box-shadow:0 12px 28px rgba(0,0,0,.10);
+    }
+
+    .app {
+      max-width:1380px;
+      width:100%;
+      height:min(790px,calc(100vh - 126px));
+      margin:0 auto;
+      display:grid;
+      grid-template-columns:270px 1fr;
+      overflow:hidden;
+      border-radius:38px;
+      background:rgba(255,255,255,.72);
+      border:1px solid rgba(255,255,255,.52);
+      box-shadow:var(--shadow);
+      backdrop-filter:blur(28px);
+    }
+
+    .sidebar {
+      padding:24px;
+      background:rgba(255,255,255,.50);
+      border-right:1px solid var(--line);
+      display:flex; flex-direction:column; gap:18px;
+    }
+
+    .mini-card {
+      border-radius:28px;
+      background:white;
+      padding:18px;
+      box-shadow:var(--soft);
+    }
+
+    .mini-card label {
+      display:block;
+      color:var(--muted);
+      font-size:13px;
+      font-weight:900;
+      margin-bottom:8px;
+    }
+
+    .input, .textarea {
+      width:100%;
+      border:1px solid var(--line);
+      border-radius:16px;
+      padding:13px 14px;
+      outline:none;
+      background:#f7faff;
+      color:var(--text);
+      transition:.18s;
+    }
+    .textarea { min-height:110px; resize:vertical; line-height:1.5; }
+    .input:focus,.textarea:focus {
+      border-color:rgba(31,85,255,.42);
+      background:white;
+      box-shadow:0 0 0 5px rgba(31,85,255,.08);
+    }
+
+    .nav { display:grid; gap:10px; }
+    .nav button {
+      display:flex; align-items:center; gap:12px;
+      border-radius:22px;
+      padding:15px;
+      background:transparent;
+      color:#52617d;
+      font-size:15px;
+      font-weight:900;
+      text-align:left;
+      transition:.2s;
+    }
+    .nav button:hover { background:rgba(255,255,255,.55); }
+    .nav button.active {
+      color:var(--blue-900);
+      background:white;
+      box-shadow:0 12px 32px rgba(25,45,90,.10);
+    }
+    .nav-icon {
+      width:38px; height:38px; border-radius:15px;
+      display:grid; place-items:center;
+      background:var(--blue-100);
+      font-size:18px;
+    }
+
+    .tip {
+      margin-top:auto;
+      border-radius:28px;
+      padding:18px;
+      background:
+              radial-gradient(circle at 80% 0%,rgba(255,255,255,.70),transparent 42%),
+              linear-gradient(145deg,#f6f9ff,#dce9ff);
+      color:#3d4b66;
+      line-height:1.55;
+      font-size:14px;
+      box-shadow:var(--soft);
+    }
+
+    .content {
+      min-width:0;
+      display:grid;
+      grid-template-rows:auto 1fr;
+      overflow:hidden;
+    }
+
+    .content-head {
+      padding:30px 34px 20px;
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:20px;
+    }
+    .content-head h2 { font-size:34px; letter-spacing:-1.4px; }
+    .content-head p { margin-top:8px; color:var(--muted); font-size:15px; }
+
+    .head-actions { display:flex; gap:10px; align-items:center; }
+
+    .btn {
+      border-radius:18px;
+      padding:12px 16px;
+      font-weight:900;
+      transition:.18s;
+      white-space:nowrap;
+    }
+    .btn.primary {
+      color:#fff;
+      background:linear-gradient(135deg,var(--blue-800),var(--blue-950));
+      box-shadow:0 14px 28px rgba(31,85,255,.22);
+    }
+    .btn.primary:hover { transform:translateY(-1px); box-shadow:0 18px 34px rgba(31,85,255,.28); }
+    .btn.soft { color:var(--blue-900); background:#eef5ff; }
+    .btn.ghost { color:#52617d; background:#f4f7ff; }
+    .btn.danger { color:#fff; background:var(--danger); }
+    .btn.small { padding:9px 12px; border-radius:14px; font-size:13px; }
+
+    .panel { display:none; min-height:0; padding:0 34px 34px; overflow:hidden; }
+    .panel.active { display:grid; }
+
+    .card {
+      background:rgba(255,255,255,.88);
+      border:1px solid rgba(255,255,255,.72);
+      border-radius:32px;
+      box-shadow:var(--soft);
+      overflow:hidden;
+      min-height:0;
+    }
+    .card-head {
+      padding:20px 22px 14px;
+      border-bottom:1px solid var(--line);
+    }
+    .card-head h3 { font-size:19px; letter-spacing:-.4px; }
+    .card-head p { margin-top:6px; color:var(--muted); font-size:13px; }
+    .card-body { padding:20px 22px 22px; }
+
+    .field { display:grid; gap:8px; margin-bottom:13px; }
+    .field label { color:#52617d; font-size:13px; font-weight:900; }
+
+    .grid-todo {
+      grid-template-columns:420px 1fr;
+      gap:18px;
+      min-height:0;
+    }
+    .grid-chat {
+      grid-template-columns:370px 1fr;
+      gap:18px;
+      min-height:0;
+    }
+    .grid-account {
+      grid-template-columns:1fr 1fr;
+      gap:18px;
+      min-height:0;
+    }
+
+    .scroll-list {
+      height:100%;
+      min-height:0;
+      overflow:auto;
+      padding:18px;
+      display:grid;
+      align-content:start;
+      gap:13px;
+    }
+
+    .todo-item, .room-item, .comment-item, .manager-item {
+      border:1px solid var(--line);
+      background:white;
+      border-radius:24px;
+      padding:17px;
+      box-shadow:0 10px 24px rgba(25,45,90,.07);
+      transition:.18s;
+    }
+    .todo-item, .room-item { cursor:pointer; }
+    .todo-item:hover,.todo-item.active,.room-item:hover,.room-item.active {
+      border-color:rgba(31,85,255,.34);
+      box-shadow:0 14px 32px rgba(31,85,255,.12);
+      transform:translateY(-1px);
+    }
+
+    .item-title {
+      display:flex; justify-content:space-between; gap:12px;
+      font-weight:950; letter-spacing:-.3px; color:#1c2940;
+    }
+    .item-content {
+      margin-top:9px;
+      color:#6d7891;
+      font-size:14px;
+      line-height:1.55;
+      white-space:pre-wrap;
+    }
+    .meta {
+      margin-top:9px;
+      color:#98a2b6;
+      font-size:12px;
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      align-items:center;
+    }
+    .badge {
+      display:inline-flex;
+      align-items:center;
+      height:26px;
+      padding:0 10px;
+      border-radius:999px;
+      background:#edf4ff;
+      color:var(--blue-900);
+      font-size:12px;
+      font-weight:950;
+    }
+    .badge.gray { background:#f2f4f8; color:#65738e; }
+    .badge.green { background:#e9fbf4; color:#0b9b64; }
+
+    .detail-empty, .empty {
+      height:100%;
+      min-height:160px;
+      display:grid;
+      place-items:center;
+      color:var(--muted);
+      text-align:center;
+      line-height:1.6;
+      padding:30px;
+    }
+
+    .detail {
+      height:100%;
+      min-height:0;
+      display:grid;
+      grid-template-rows:auto auto 1fr;
+    }
+
+    .detail-title {
+      font-size:24px;
+      letter-spacing:-.7px;
+      line-height:1.25;
+      margin-bottom:10px;
+    }
+
+    .section-box {
+      border-top:1px solid var(--line);
+      padding:18px 22px;
+      min-height:0;
+    }
+
+    .split {
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:12px;
+    }
+
+    .comments-managers {
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:14px;
+      min-height:0;
+    }
+
+    .sub-list {
+      display:grid;
+      gap:10px;
+      max-height:230px;
+      overflow:auto;
+      padding-right:2px;
+    }
+
+    .chat-card {
+      display:grid;
+      grid-template-rows:auto 1fr auto;
+      min-height:0;
+    }
+
+    .messages {
+      padding:22px;
+      overflow-y:auto;
+      min-height:0;
+      display:flex;
+      flex-direction:column;
+      gap:14px;
+      background:
+              radial-gradient(circle at 16% 8%,rgba(31,85,255,.07),transparent 30%),
+              linear-gradient(180deg,#fbfdff,#f4f8ff);
+    }
+
+    .message {
+      max-width:72%;
+      display:grid;
+      gap:6px;
+      align-self:flex-start;
+    }
+    .message.me { align-self:flex-end; justify-items:end; }
+    .message-sender { padding:0 6px; color:#75819b; font-size:12px; font-weight:900; }
+    .bubble {
+      padding:13px 16px;
+      border-radius:20px 20px 20px 8px;
+      background:white;
+      border:1px solid var(--line);
+      color:#27334a;
+      box-shadow:0 10px 22px rgba(25,45,90,.08);
+      word-break:break-all;
+      line-height:1.52;
+      font-size:15px;
+    }
+    .message.me .bubble {
+      color:white;
+      border-color:transparent;
+      background:linear-gradient(135deg,#4f87ff,#1f55ff);
+      border-radius:20px 20px 8px 20px;
+    }
+    .message-time { padding:0 6px; color:#9aa5b8; font-size:11px; }
+
+    .chat-input-area {
+      padding:18px;
+      border-top:1px solid var(--line);
+      background:rgba(255,255,255,.84);
+    }
+    .chat-form { display:grid; grid-template-columns:1fr auto; gap:10px; }
+
+    .auth-modal {
+      position:fixed; inset:0;
+      display:none;
+      place-items:center;
+      background:rgba(9,18,45,.28);
+      backdrop-filter:blur(10px);
+      z-index:30;
+      padding:24px;
+    }
+    .auth-modal.show { display:grid; }
+    .modal-card {
+      width:min(470px,100%);
+      border-radius:34px;
+      background:rgba(255,255,255,.92);
+      border:1px solid rgba(255,255,255,.7);
+      box-shadow:0 28px 80px rgba(17,35,82,.28);
+      overflow:hidden;
+    }
+    .modal-head {
+      padding:24px 26px 18px;
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      border-bottom:1px solid var(--line);
+    }
+    .modal-head h3 { font-size:24px; letter-spacing:-.7px; }
+    .modal-head p { margin-top:6px; color:var(--muted); font-size:14px; }
+    .close {
+      width:38px; height:38px;
+      border-radius:14px;
+      background:#f1f5ff;
+      color:#52617d;
+      font-size:20px;
+    }
+    .modal-body { padding:22px 26px 26px; }
+
+    .auth-switch {
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:8px;
+      padding:6px;
+      background:#eef5ff;
+      border-radius:20px;
+      margin-bottom:16px;
+    }
+    .auth-switch button {
+      border-radius:15px;
+      padding:11px;
+      background:transparent;
+      color:#6b7893;
+      font-weight:950;
+    }
+    .auth-switch button.active {
+      color:var(--blue-900);
+      background:white;
+      box-shadow:0 8px 20px rgba(25,45,90,.10);
+    }
+
+    .toast {
+      position:fixed;
+      left:50%; bottom:28px;
+      transform:translateX(-50%) translateY(30px);
+      opacity:0;
+      pointer-events:none;
+      background:rgba(18,30,58,.93);
+      color:white;
+      padding:13px 18px;
+      border-radius:999px;
+      box-shadow:0 14px 38px rgba(0,0,0,.20);
+      transition:.22s;
+      font-size:14px;
+      z-index:50;
+      max-width:min(760px,calc(100vw - 32px));
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+    .icon-button {
+      width:40px;
+      height:40px;
+      border-radius:15px;
+      background:#eef5ff;
+      color:var(--blue-900);
+      display:inline-grid;
+      place-items:center;
+      font-size:18px;
+      font-weight:950;
+      transition:.18s;
+    }
+    .icon-button:hover {
+      transform:translateY(-1px);
+      background:white;
+      box-shadow:0 10px 24px rgba(31,85,255,.16);
+    }
+
+    .compact-head {
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+    }
+
+    .comment-compose {
+      display:grid;
+      grid-template-columns:1fr auto;
+      gap:10px;
+      align-items:end;
+      margin-bottom:14px;
+    }
+
+    .comment-compose .textarea {
+      min-height:58px;
+      max-height:94px;
+    }
+
+
+    @media (max-width:1160px) {
+      body { overflow:auto; }
+      .page { height:auto; }
+      .app { height:auto; min-height:920px; grid-template-columns:1fr; }
+      .sidebar { border-right:0; border-bottom:1px solid var(--line); }
+      .grid-todo, .grid-chat, .grid-account { grid-template-columns:1fr; }
+      .panel { overflow:visible; }
+      .comments-managers { grid-template-columns:1fr; }
+    }
+  </style>
+</head>
+
+<body>
+<div class="page">
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo" aria-hidden="true"></div>
+      <div>
+        <h1>Todo Wave</h1>
+        <p>할 일을 정리하고, 필요한 이야기를 가볍게 이어가요.</p>
+      </div>
+    </div>
+
+    <div class="top-actions">
+      <div class="status-pill">
+        <span class="status-dot" id="statusDot"></span>
+        <span id="statusText">채팅 대기 중</span>
+      </div>
+      <div class="account-pill" id="accountPill">방문자</div>
+      <button class="top-button" id="authTopButton" onclick="openAuthModal()">로그인</button>
+    </div>
+  </header>
+
+  <main class="app">
+    <aside class="sidebar">
+      <section class="mini-card">
+        <label for="nicknameInput">익명 닉네임</label>
+        <input class="input" id="nicknameInput" placeholder="익명고래" />
+      </section>
+
+      <nav class="nav" aria-label="주요 메뉴">
+        <button id="todoTab" class="active" onclick="openPanel('todo')">
+          <span class="nav-icon">✓</span><span>TODO</span>
+        </button>
+        <button id="chatTab" onclick="openPanel('chat')">
+          <span class="nav-icon">💬</span><span>익명 채팅방</span>
+        </button>
+        <button id="accountTab" onclick="openPanel('account')">
+          <span class="nav-icon">👤</span><span>내 계정</span>
+        </button>
+      </nav>
+
+      <section class="tip">
+        <strong>Todo Wave</strong><br />
+        할 일, 댓글, 담당자, 익명 채팅방을 한 화면에서 이어서 관리해요.
+      </section>
+    </aside>
+
+    <section class="content">
+      <div class="content-head">
+        <div>
+          <h2 id="panelTitle">TODO</h2>
+          <p id="panelSubtitle">할 일을 등록하고 댓글과 담당자를 함께 관리해요.</p>
+        </div>
+        <div class="head-actions">
+          <button class="btn primary" id="openTodoCreateButton" onclick="openTodoModal()" type="button">TODO 등록</button>
+          <button class="btn soft" onclick="refreshCurrentPanel()">새로고침</button>
+        </div>
+      </div>
+
+      <!-- TODO PANEL -->
+      <section id="todoPanel" class="panel grid-todo active">
+        <div class="card" style="display:grid; grid-template-rows:auto 1fr;">
+          <div class="card-head">
+            <div class="compact-head">
+              <div>
+                <h3>TODO 목록</h3>
+                <p>할 일을 선택하면 오른쪽에서 상세 내용을 확인할 수 있어요.</p>
+              </div>
+              <button class="icon-button" onclick="openSearchModal()" type="button" title="검색">⌕</button>
+            </div>
+          </div>
+
+          <div id="todoList" class="scroll-list">
+            <div class="empty">로그인 후 TODO 목록을 확인할 수 있어요.</div>
+          </div>
+        </div>
+
+        <div class="card detail">
+          <div class="card-head">
+            <h3>TODO 상세</h3>
+            <p>내용을 확인하고 댓글과 담당자를 관리해요.</p>
+          </div>
+          <div id="todoDetail" class="card-body">
+            <div class="detail-empty">왼쪽 TODO 목록에서 항목을 선택해주세요.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- CHAT PANEL -->
+      <section id="chatPanel" class="panel grid-chat">
+        <div class="card" style="display:grid; grid-template-rows:auto auto 1fr;">
+          <div class="card-head">
+            <h3>채팅방</h3>
+            <p>익명 닉네임으로 가볍게 대화할 수 있어요.</p>
+          </div>
+          <div class="card-body" style="border-bottom:1px solid var(--line);">
+            <form onsubmit="createRoom(event)">
+              <div class="field">
+                <label for="roomNameInput">채팅방 이름</label>
+                <input class="input" id="roomNameInput" placeholder="예: 오늘의 작업방" />
+              </div>
+              <button class="btn primary" type="submit" style="width:100%;">채팅방 만들기</button>
+            </form>
+          </div>
+          <div id="roomList" class="scroll-list">
+            <div class="empty">채팅방을 불러오는 중입니다.</div>
+          </div>
+        </div>
+
+        <div class="card chat-card">
+          <div class="card-head">
+            <h3 id="chatRoomTitle">채팅방을 선택해주세요</h3>
+            <p id="chatRoomSubtitle">채팅방을 선택하면 대화를 시작할 수 있어요.</p>
+          </div>
+          <div id="messages" class="messages">
+            <div class="empty">아직 선택된 채팅방이 없습니다.</div>
+          </div>
+          <div class="chat-input-area">
+            <form class="chat-form" onsubmit="sendMessage(event)">
+              <input class="input" id="messageInput" placeholder="메시지를 입력하세요." disabled />
+              <button class="btn primary" id="sendButton" type="submit" disabled>전송</button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <!-- ACCOUNT PANEL -->
+      <section id="accountPanel" class="panel grid-account">
+        <div class="card">
+          <div class="card-head">
+            <h3>내 계정</h3>
+            <p>로그인 상태와 계정 정보를 확인해요.</p>
+          </div>
+          <div class="card-body" id="accountInfo">
+            <div class="empty">로그인 후 계정 정보를 확인할 수 있어요.</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h3>비밀번호 변경</h3>
+            <p>현재 비밀번호를 확인한 뒤 새 비밀번호로 변경해요.</p>
+          </div>
+          <div class="card-body">
+            <form onsubmit="changePassword(event)">
+              <div class="field">
+                <label for="oldPasswordInput">현재 비밀번호</label>
+                <input class="input" id="oldPasswordInput" type="password" />
+              </div>
+              <div class="field">
+                <label for="newPasswordInput">새 비밀번호</label>
+                <input class="input" id="newPasswordInput" type="password" />
+              </div>
+              <button class="btn primary" type="submit" style="width:100%;">변경하기</button>
+            </form>
+          </div>
+        </div>
+      </section>
+    </section>
+  </main>
+</div>
+
+<!-- TODO CREATE MODAL -->
+<div class="auth-modal" id="todoModal">
+  <div class="modal-card">
+    <div class="modal-head">
+      <div>
+        <h3>TODO 등록</h3>
+        <p>새로운 할 일을 작성해요.</p>
+      </div>
+      <button class="close" onclick="closeTodoModal()" type="button">×</button>
+    </div>
+    <div class="modal-body">
+      <form onsubmit="createTodo(event)">
+        <div class="field">
+          <label for="todoTitleInput">제목</label>
+          <input class="input" id="todoTitleInput" placeholder="예: 실시간 채팅 구현하기" />
+        </div>
+        <div class="field">
+          <label for="todoContentInput">내용</label>
+          <textarea class="textarea" id="todoContentInput" placeholder="해야 할 일을 자세히 적어주세요."></textarea>
+        </div>
+        <button class="btn primary" type="submit" style="width:100%;">등록하기</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- TODO SEARCH MODAL -->
+<div class="auth-modal" id="searchModal">
+  <div class="modal-card">
+    <div class="modal-head">
+      <div>
+        <h3>TODO 검색</h3>
+        <p>필요한 할 일을 빠르게 찾아요.</p>
+      </div>
+      <button class="close" onclick="closeSearchModal()" type="button">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label for="searchTitleInput">제목</label>
+        <input class="input" id="searchTitleInput" placeholder="제목으로 검색" />
+      </div>
+      <div class="split">
+        <div class="field">
+          <label for="searchStartInput">시작일</label>
+          <input class="input" id="searchStartInput" type="date" />
+        </div>
+        <div class="field">
+          <label for="searchEndInput">종료일</label>
+          <input class="input" id="searchEndInput" type="date" />
+        </div>
+      </div>
+      <div class="field">
+        <label for="searchNicknameInput">작성자 닉네임</label>
+        <input class="input" id="searchNicknameInput" placeholder="닉네임" />
+      </div>
+      <div class="split">
+        <button class="btn soft" onclick="searchTodos()" type="button">검색</button>
+        <button class="btn ghost" onclick="clearTodoSearch()" type="button">초기화</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MANAGER MODAL -->
+<div class="auth-modal" id="managerModal">
+  <div class="modal-card">
+    <div class="modal-head">
+      <div>
+        <h3>담당자 설정</h3>
+        <p>선택한 TODO의 담당자를 추가하거나 삭제해요.</p>
+      </div>
+      <button class="close" onclick="closeManagerModal()" type="button">×</button>
+    </div>
+    <div class="modal-body">
+      <form onsubmit="addManager(event)">
+        <div class="field">
+          <label for="managerUserIdInput">담당자 User ID</label>
+          <input class="input" id="managerUserIdInput" type="number" placeholder="예: 1" />
+        </div>
+        <button class="btn primary" type="submit" style="width:100%;">담당자 추가</button>
+      </form>
+      <div style="height:16px;"></div>
+      <div id="managerList" class="sub-list">
+        <div class="empty" style="min-height:80px;">TODO를 선택하면 담당자를 확인할 수 있어요.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- AUTH MODAL -->
+<div class="auth-modal" id="authModal">
+  <div class="modal-card">
+    <div class="modal-head">
+      <div>
+        <h3 id="authModalTitle">로그인</h3>
+        <p id="authModalSubtitle">계정으로 입장하면 TODO 기능을 사용할 수 있어요.</p>
+      </div>
+      <button class="close" onclick="closeAuthModal()" type="button">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="auth-switch">
+        <button id="signinModeBtn" class="active" onclick="setAuthMode('signin')" type="button">로그인</button>
+        <button id="signupModeBtn" onclick="setAuthMode('signup')" type="button">회원가입</button>
+      </div>
+
+      <form onsubmit="submitAuth(event)">
+        <div class="field">
+          <label for="emailInput">이메일</label>
+          <input class="input" id="emailInput" type="email" placeholder="todo@example.com" />
+        </div>
+        <div class="field">
+          <label for="passwordInput">비밀번호</label>
+          <input class="input" id="passwordInput" type="password" placeholder="비밀번호" />
+        </div>
+        <div id="signupFields" style="display:none;">
+          <div class="field">
+            <label for="signupNicknameInput">닉네임</label>
+            <input class="input" id="signupNicknameInput" placeholder="예: 웨이브" />
+          </div>
+        </div>
+        <button class="btn primary" id="authSubmitButton" type="submit" style="width:100%;">로그인</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  const API = {
+    signup: "/auth/signup",
+    signin: "/auth/signin",
+    todos: "/todos",
+    todoList: "/todos?page=1&size=10",
+    todoSearch: "/todos/search",
+    rooms: "/api/chat/rooms"
+  };
+
+  let authMode = "signin";
+  let token = localStorage.getItem("todoWaveToken") || "";
+  let currentUser = parseJwt(token);
+  let currentPanel = "todo";
+  let currentTodo = null;
+  let currentRoomId = null;
+  let currentSubscription = null;
+  let stompClient = null;
+
+  const $ = (id) => document.getElementById(id);
+
+  init();
+
+  function init() {
+    setDefaultNickname();
+    updateAuthView();
+
+    if (token) loadTodos();
+    loadRooms();
+    connectWebSocket();
+  }
+
+  function setDefaultNickname() {
+    if (!$("nicknameInput").value.trim()) {
+      const nick = currentUser?.nickname || ("익명" + Math.floor(Math.random() * 9000 + 1000));
+      $("nicknameInput").value = nick;
+    }
+  }
+
+  function getNickname() {
+    const value = $("nicknameInput").value.trim();
+    if (value) return value;
+    setDefaultNickname();
+    return $("nicknameInput").value.trim();
+  }
+
+  function openPanel(panel) {
+    currentPanel = panel;
+    ["todo", "chat", "account"].forEach(name => {
+      $(name + "Panel").classList.toggle("active", name === panel);
+      $(name + "Tab").classList.toggle("active", name === panel);
+    });
+
+    $("openTodoCreateButton").style.display = panel === "todo" ? "inline-flex" : "none";
+
+    if (panel === "todo") {
+      $("panelTitle").textContent = "TODO";
+      $("panelSubtitle").textContent = "할 일 목록을 확인하고 필요한 항목을 선택해 상세 내용을 살펴봐요.";
+    } else if (panel === "chat") {
+      $("panelTitle").textContent = "익명 채팅방";
+      $("panelSubtitle").textContent = "로그인 없이도 익명 닉네임으로 대화할 수 있어요.";
+    } else {
+      $("panelTitle").textContent = "내 계정";
+      $("panelSubtitle").textContent = "계정 정보를 확인하고 비밀번호를 변경할 수 있어요.";
+    }
+  }
+
+  function refreshCurrentPanel() {
+    if (currentPanel === "todo") {
+      loadTodos();
+      if (currentTodo?.id) selectTodo(currentTodo.id);
+    } else if (currentPanel === "chat") {
+      loadRooms();
+      if (currentRoomId) loadMessages(currentRoomId);
+    } else {
+      updateAccountPanel();
+    }
+  }
+
+  function openAuthModal() {
+    if (token) {
+      logout();
+      return;
+    }
+    $("authModal").classList.add("show");
+  }
+
+  function closeAuthModal() {
+    $("authModal").classList.remove("show");
+  }
+
+  function setAuthMode(mode) {
+    authMode = mode;
+    $("signinModeBtn").classList.toggle("active", mode === "signin");
+    $("signupModeBtn").classList.toggle("active", mode === "signup");
+    $("signupFields").style.display = mode === "signup" ? "block" : "none";
+    $("authSubmitButton").textContent = mode === "signup" ? "회원가입" : "로그인";
+    $("authModalTitle").textContent = mode === "signup" ? "회원가입" : "로그인";
+    $("authModalSubtitle").textContent = mode === "signup"
+            ? "새 계정을 만들고 Todo Wave를 시작해요."
+            : "계정으로 입장하면 TODO 기능을 사용할 수 있어요.";
+  }
+
+  function openTodoModal() {
+    if (!token) {
+      toast("로그인 후 TODO를 등록할 수 있어요.");
+      openAuthModal();
+      return;
+    }
+
+    $("todoModal").classList.add("show");
+    setTimeout(() => $("todoTitleInput").focus(), 50);
+  }
+
+  function closeTodoModal() {
+    $("todoModal").classList.remove("show");
+  }
+
+  function openSearchModal() {
+    if (!token) {
+      toast("로그인 후 TODO를 검색할 수 있어요.");
+      openAuthModal();
+      return;
+    }
+    $("searchModal").classList.add("show");
+    setTimeout(() => $("searchTitleInput").focus(), 50);
+  }
+
+  function closeSearchModal() {
+    $("searchModal").classList.remove("show");
+  }
+
+  function openManagerModal() {
+    if (!currentTodo) {
+      toast("TODO를 먼저 선택해주세요.");
+      return;
+    }
+    $("managerModal").classList.add("show");
+    loadManagers(currentTodo.id || currentTodo.todoId);
+  }
+
+  function closeManagerModal() {
+    $("managerModal").classList.remove("show");
+  }
+
+  async function submitAuth(event) {
+    event.preventDefault();
+
+    const email = $("emailInput").value.trim();
+    const password = $("passwordInput").value.trim();
+
+    if (!email || !password) {
+      toast("이메일과 비밀번호를 입력해주세요.");
+      return;
+    }
+
+    const payload = { email, password };
+    let url = API.signin;
+
+    if (authMode === "signup") {
+      const nickname = $("signupNicknameInput").value.trim();
+      if (!nickname) {
+        toast("닉네임을 입력해주세요.");
+        return;
+      }
+      payload.nickname = nickname;
+      payload.userRole = "USER";
+      url = API.signup;
+    }
+
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("인증 실패:", response.status, errorText);
+        toast(errorText || "요청에 실패했습니다.");
+        return;
+      }
+
+      const data = await readResponse(response);
+      const bearerToken = getTokenFromResponse(data);
+
+      if (!bearerToken) {
+        console.error("토큰 없음:", data);
+        toast("응답에서 토큰을 확인하지 못했습니다.");
+        return;
+      }
+
+      token = bearerToken;
+      currentUser = parseJwt(token);
+      localStorage.setItem("todoWaveToken", token);
+
+      if (currentUser?.nickname) $("nicknameInput").value = currentUser.nickname;
+
+      updateAuthView();
+      closeAuthModal();
+      toast(authMode === "signup" ? "회원가입이 완료되었습니다." : "로그인되었습니다.");
+      loadTodos();
+      openPanel("todo");
+    } catch (error) {
+      console.error(error);
+      toast("요청 처리 중 오류가 발생했습니다.");
+    }
+  }
+
+  function logout() {
+    token = "";
+    currentUser = null;
+    currentTodo = null;
+    localStorage.removeItem("todoWaveToken");
+    updateAuthView();
+    $("todoList").innerHTML = `<div class="empty">로그인 후 TODO 목록을 확인할 수 있어요.</div>`;
+    $("todoDetail").innerHTML = `<div class="detail-empty">TODO를 선택해주세요.</div>`;
+    toast("로그아웃되었습니다.");
+  }
+
+  function updateAuthView() {
+    const loggedIn = Boolean(token);
+    $("authTopButton").textContent = loggedIn ? "로그아웃" : "로그인";
+    $("accountPill").textContent = loggedIn ? (currentUser?.nickname || currentUser?.email || "회원") : "방문자";
+    updateAccountPanel();
+  }
+
+  function updateAccountPanel() {
+    if (!token) {
+      $("accountInfo").innerHTML = `<div class="empty">로그인 후 계정 정보를 확인할 수 있어요.</div>`;
+      return;
+    }
+
+    $("accountInfo").innerHTML = `
+        <div class="item-title">
+          <span>${escapeHtml(currentUser?.nickname || "회원")}</span>
+          <span class="badge green">로그인 중</span>
+        </div>
+        <div class="item-content">
+          ${escapeHtml(currentUser?.email || "")}
+        </div>
+        <div class="meta">
+          ${currentUser?.sub ? `<span>USER ID ${escapeHtml(currentUser.sub)}</span>` : ""}
+          ${currentUser?.userRole ? `<span>${escapeHtml(currentUser.userRole)}</span>` : ""}
+        </div>
+      `;
+  }
+
+  function authHeaders(json = true) {
+    const headers = {};
+    if (json) headers["Content-Type"] = "application/json";
+    if (token) headers.Authorization = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
+    return headers;
+  }
+
+  async function loadTodos() {
+    if (!token) {
+      $("todoList").innerHTML = `<div class="empty">로그인 후 TODO 목록을 확인할 수 있어요.</div>`;
+      return;
+    }
+
+    $("todoList").innerHTML = `<div class="empty">TODO 목록을 불러오는 중입니다.</div>`;
+
+    try {
+      const response = await fetch(API.todoList, { headers: authHeaders(false) });
+      if (!response.ok) {
+        $("todoList").innerHTML = `<div class="empty">TODO 목록을 불러오지 못했습니다.</div>`;
+        return;
+      }
+      const data = await response.json();
+      renderTodos(normalizeList(data));
+      closeSearchModal();
+    } catch (error) {
+      console.error(error);
+      $("todoList").innerHTML = `<div class="empty">TODO 목록을 불러오지 못했습니다.</div>`;
+    }
+  }
+
+  function renderTodos(todos) {
+    if (!todos || todos.length === 0) {
+      $("todoList").innerHTML = `<div class="empty">아직 등록된 TODO가 없습니다.</div>`;
+      return;
+    }
+
+    $("todoList").innerHTML = todos.map(todo => {
+      const id = todo.id || todo.todoId;
+      const title = todo.title || "제목 없음";
+      const contents = todo.contents || todo.content || "";
+      const userEmail = todo.user?.email || "";
+      const weather = todo.weather || "TODO";
+
+      return `
+          <article class="todo-item ${currentTodo?.id === id ? "active" : ""}" onclick="selectTodo(${id})">
+            <div class="item-title">
+              <span>${escapeHtml(title)}</span>
+              <span class="badge">${escapeHtml(weather)}</span>
+            </div>
+            <div class="item-content">${escapeHtml(contents)}</div>
+            <div class="meta">
+              <span>ID ${escapeHtml(id)}</span>
+              ${userEmail ? `<span>${escapeHtml(userEmail)}</span>` : ""}
+              ${todo.createdAt ? `<span>${escapeHtml(formatDate(todo.createdAt))}</span>` : ""}
+            </div>
+          </article>
+        `;
+    }).join("");
+  }
+
+  async function createTodo(event) {
+    event.preventDefault();
+
+    if (!token) {
+      toast("로그인 후 TODO를 등록할 수 있어요.");
+      openAuthModal();
+      return;
+    }
+
+    const title = $("todoTitleInput").value.trim();
+    const contents = $("todoContentInput").value.trim();
+
+    if (!title || !contents) {
+      toast("제목과 내용을 입력해주세요.");
+      return;
+    }
+
+    try {
+      const response = await fetch(API.todos, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ title, contents })
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        console.error(text);
+        toast("TODO 등록에 실패했습니다.");
+        return;
+      }
+
+      $("todoTitleInput").value = "";
+      $("todoContentInput").value = "";
+      closeTodoModal();
+      toast("TODO가 등록되었습니다.");
+      loadTodos();
+    } catch (error) {
+      console.error(error);
+      toast("TODO 등록 중 오류가 발생했습니다.");
+    }
+  }
+
+  async function searchTodos() {
+    if (!token) {
+      toast("로그인 후 검색할 수 있어요.");
+      openAuthModal();
+      return;
+    }
+
+    const params = new URLSearchParams();
+    params.set("page", "1");
+    params.set("size", "10");
+
+    const title = $("searchTitleInput").value.trim();
+    const nickname = $("searchNicknameInput").value.trim();
+    const startDate = $("searchStartInput").value;
+    const endDate = $("searchEndInput").value;
+
+    if (title) params.set("title", title);
+    if (nickname) params.set("nickname", nickname);
+    if (startDate) params.set("startDate", startDate);
+    if (endDate) params.set("endDate", endDate);
+
+    try {
+      const response = await fetch(`${API.todoSearch}?${params.toString()}`, { headers: authHeaders(false) });
+      if (!response.ok) {
+        toast("TODO 검색에 실패했습니다.");
+        return;
+      }
+      const data = await response.json();
+      renderTodos(normalizeList(data));
+      closeSearchModal();
+    } catch (error) {
+      console.error(error);
+      toast("TODO 검색 중 오류가 발생했습니다.");
+    }
+  }
+
+  function clearTodoSearch() {
+    $("searchTitleInput").value = "";
+    $("searchNicknameInput").value = "";
+    $("searchStartInput").value = "";
+    $("searchEndInput").value = "";
+    closeSearchModal();
+    loadTodos();
+  }
+
+  async function selectTodo(todoId) {
+    if (!token) {
+      openAuthModal();
+      return;
+    }
+
+    try {
+      const response = await fetch(`/todos/${todoId}`, { headers: authHeaders(false) });
+      if (!response.ok) {
+        toast("TODO 상세 조회에 실패했습니다.");
+        return;
+      }
+
+      currentTodo = await response.json();
+      renderTodoDetail(currentTodo);
+      loadTodos();
+      loadComments(todoId);
+      loadManagers(todoId);
+    } catch (error) {
+      console.error(error);
+      toast("TODO 상세 조회 중 오류가 발생했습니다.");
+    }
+  }
+
+  function renderTodoDetail(todo) {
+    const id = todo.id || todo.todoId;
+    const title = todo.title || "제목 없음";
+    const contents = todo.contents || todo.content || "";
+    const userEmail = todo.user?.email || "";
+
+    $("todoDetail").innerHTML = `
+        <div>
+          <div class="compact-head" style="align-items:flex-start;">
+            <div>
+              <div class="detail-title">${escapeHtml(title)}</div>
+              <div class="item-content">${escapeHtml(contents)}</div>
+            </div>
+            <button class="icon-button" onclick="openManagerModal()" type="button" title="담당자 설정">⚙</button>
+          </div>
+          <div class="meta">
+            <span class="badge">${escapeHtml(todo.weather || "TODO")}</span>
+            <span>ID ${escapeHtml(id)}</span>
+            ${userEmail ? `<span>${escapeHtml(userEmail)}</span>` : ""}
+            ${todo.createdAt ? `<span>${escapeHtml(formatDate(todo.createdAt))}</span>` : ""}
+          </div>
+        </div>
+
+        <div class="section-box">
+          <div class="item-title" style="margin-bottom:12px;">댓글</div>
+          <div class="comment-compose">
+            <textarea class="textarea" id="commentInput" placeholder="댓글을 입력하세요."></textarea>
+            <button class="btn primary small" id="commentSubmitButton" type="button">등록</button>
+          </div>
+          <div id="commentList" class="sub-list">
+            <div class="empty" style="min-height:80px;">댓글을 불러오는 중입니다.</div>
+          </div>
+        </div>
+      `;
+
+    const commentButton = $("commentSubmitButton");
+    if (commentButton) {
+      commentButton.addEventListener("click", function () {
+        createComment(id);
+      });
+    }
+  }
+
+  async function loadComments(todoId) {
+    const box = $("commentList");
+    if (!box) return;
+
+    try {
+      const response = await fetch(`/todos/${todoId}/comments`, { headers: authHeaders(false) });
+      if (!response.ok) {
+        const text = await response.text();
+        console.error("댓글 조회 실패:", response.status, text);
+        box.innerHTML = `<div class="empty" style="min-height:80px;">댓글을 불러오지 못했습니다.</div>`;
+        return;
+      }
+      const comments = await response.json();
+
+      if (!comments || comments.length === 0) {
+        box.innerHTML = `<div class="empty" style="min-height:80px;">아직 댓글이 없습니다.</div>`;
+        return;
+      }
+
+      box.innerHTML = comments.map(comment => `
+          <article class="comment-item">
+            <div class="item-content">${escapeHtml(comment.contents || "")}</div>
+            <div class="meta">${comment.user?.email ? `<span>${escapeHtml(comment.user.email)}</span>` : ""}</div>
+          </article>
+        `).join("");
+    } catch (error) {
+      console.error(error);
+      box.innerHTML = `<div class="empty" style="min-height:80px;">댓글을 불러오지 못했습니다.</div>`;
+    }
+  }
+
+  async function createComment(todoId) {
+    const targetTodoId = todoId || currentTodo?.id || currentTodo?.todoId;
+    console.log("댓글 등록 버튼 클릭:", { targetTodoId, hasToken: Boolean(token) });
+    toast("댓글 등록 요청 중...");
+
+    if (!targetTodoId) {
+      toast("TODO ID를 확인하지 못했습니다.");
+      console.error("댓글 등록 실패: todoId 없음", currentTodo);
+      return;
+    }
+
+    if (!token) {
+      toast("로그인 후 댓글을 등록할 수 있어요.");
+      openAuthModal();
+      return;
+    }
+
+    const input = $("commentInput");
+    if (!input) {
+      toast("댓글 입력창을 찾지 못했습니다.");
+      console.error("commentInput 없음");
+      return;
+    }
+
+    const contents = input.value.trim();
+
+    if (!contents) {
+      toast("댓글 내용을 입력해주세요.");
+      return;
+    }
+
+    try {
+      console.log("댓글 등록 요청 전송:", `/todos/${targetTodoId}/comments`, { contents });
+
+      const response = await fetch(`/todos/${targetTodoId}/comments`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ contents, content: contents })
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        console.error("댓글 등록 실패:", response.status, text);
+        toast(`댓글 등록 실패: ${response.status}`);
+        return;
+      }
+
+      const data = await readResponse(response);
+      console.log("댓글 등록 성공:", data);
+
+      input.value = "";
+      toast("댓글이 등록되었습니다.");
+      loadComments(targetTodoId);
+    } catch (error) {
+      console.error("댓글 등록 중 오류:", error);
+      toast("댓글 등록 중 오류가 발생했습니다.");
+    }
+  }
+
+  async function loadManagers(todoId) {
+    const box = $("managerList");
+    if (!box) return;
+
+    try {
+      const response = await fetch(`/todos/${todoId}/managers`, { headers: authHeaders(false) });
+      if (!response.ok) {
+        box.innerHTML = `<div class="empty" style="min-height:80px;">담당자를 불러오지 못했습니다.</div>`;
+        return;
+      }
+      const managers = await response.json();
+
+      if (!managers || managers.length === 0) {
+        box.innerHTML = `<div class="empty" style="min-height:80px;">아직 담당자가 없습니다.</div>`;
+        return;
+      }
+
+      box.innerHTML = managers.map(manager => `
+          <article class="manager-item">
+            <div class="item-title">
+              <span>${escapeHtml(manager.user?.email || "담당자")}</span>
+              <button class="btn danger small" onclick="deleteManager(${todoId}, ${manager.id || manager.managerId})" type="button">삭제</button>
+            </div>
+            <div class="meta">Manager ID ${escapeHtml(manager.id || manager.managerId)}</div>
+          </article>
+        `).join("");
+    } catch (error) {
+      console.error(error);
+      box.innerHTML = `<div class="empty" style="min-height:80px;">담당자를 불러오지 못했습니다.</div>`;
+    }
+  }
+
+  async function addManager(event) {
+    event.preventDefault();
+
+    const todoId = currentTodo?.id || currentTodo?.todoId;
+
+    if (!todoId) {
+      toast("TODO를 먼저 선택해주세요.");
+      return;
+    }
+
+    if (!token) {
+      toast("로그인 후 담당자를 추가할 수 있어요.");
+      openAuthModal();
+      return;
+    }
+
+    const managerUserId = Number($("managerUserIdInput").value);
+
+    if (!managerUserId) {
+      toast("담당자 User ID를 입력해주세요.");
+      return;
+    }
+
+    try {
+      const response = await fetch(`/todos/${todoId}/managers`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ managerUserId, userId: managerUserId })
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        console.error("담당자 추가 실패:", response.status, text);
+        toast(`담당자 추가 실패: ${response.status}`);
+        return;
+      }
+
+      $("managerUserIdInput").value = "";
+      toast("담당자가 추가되었습니다.");
+      loadManagers(todoId);
+    } catch (error) {
+      console.error(error);
+      toast("담당자 추가 중 오류가 발생했습니다.");
+    }
+  }
+
+  async function deleteManager(todoId, managerId) {
+    if (!token) {
+      openAuthModal();
+      return;
+    }
+
+    try {
+      const response = await fetch(`/todos/${todoId}/managers/${managerId}`, {
+        method: "DELETE",
+        headers: authHeaders(false)
+      });
+
+      if (!response.ok) {
+        toast("담당자 삭제에 실패했습니다.");
+        return;
+      }
+
+      toast("담당자가 삭제되었습니다.");
+      loadManagers(todoId);
+    } catch (error) {
+      console.error(error);
+      toast("담당자 삭제 중 오류가 발생했습니다.");
+    }
+  }
+
+  async function changePassword(event) {
+    event.preventDefault();
+
+    if (!token) {
+      toast("로그인 후 비밀번호를 변경할 수 있어요.");
+      openAuthModal();
+      return;
+    }
+
+    const oldPassword = $("oldPasswordInput").value.trim();
+    const newPassword = $("newPasswordInput").value.trim();
+
+    if (!oldPassword || !newPassword) {
+      toast("현재 비밀번호와 새 비밀번호를 입력해주세요.");
+      return;
+    }
+
+    try {
+      const response = await fetch("/users", {
+        method: "PUT",
+        headers: authHeaders(),
+        body: JSON.stringify({ oldPassword, newPassword })
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        console.error(text);
+        toast("비밀번호 변경에 실패했습니다.");
+        return;
+      }
+
+      $("oldPasswordInput").value = "";
+      $("newPasswordInput").value = "";
+      toast("비밀번호가 변경되었습니다.");
+    } catch (error) {
+      console.error(error);
+      toast("비밀번호 변경 중 오류가 발생했습니다.");
+    }
+  }
+
+  async function loadRooms() {
+    $("roomList").innerHTML = `<div class="empty">채팅방을 불러오는 중입니다.</div>`;
+
+    try {
+      const response = await fetch(API.rooms);
+      if (!response.ok) {
+        $("roomList").innerHTML = `<div class="empty">채팅방을 불러오지 못했습니다.</div>`;
+        return;
+      }
+
+      const rooms = await response.json();
+      renderRooms(rooms);
+    } catch (error) {
+      console.error(error);
+      $("roomList").innerHTML = `<div class="empty">채팅방을 불러오지 못했습니다.</div>`;
+    }
+  }
+
+  function renderRooms(rooms) {
+    if (!rooms || rooms.length === 0) {
+      $("roomList").innerHTML = `<div class="empty">아직 만들어진 채팅방이 없습니다.</div>`;
+      return;
+    }
+
+    $("roomList").innerHTML = rooms.map(room => `
+        <article class="room-item ${currentRoomId === room.id ? "active" : ""}"
+                 onclick="selectRoom(${room.id}, '${escapeAttr(room.name)}')">
+          <div class="item-title">
+            <span>${escapeHtml(room.name || "이름 없는 채팅방")}</span>
+            <span class="badge">입장</span>
+          </div>
+          <div class="meta">Room ${escapeHtml(room.id)}</div>
+        </article>
+      `).join("");
+  }
+
+  async function createRoom(event) {
+    event.preventDefault();
+
+    const input = $("roomNameInput");
+    const name = input.value.trim();
+
+    if (!name) {
+      toast("채팅방 이름을 입력해주세요.");
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API.rooms}?name=${encodeURIComponent(name)}`, { method: "POST" });
+      if (!response.ok) {
+        const text = await response.text();
+        console.error(text);
+        toast("채팅방 생성에 실패했습니다.");
+        return;
+      }
+
+      input.value = "";
+      toast("채팅방이 만들어졌습니다.");
+      loadRooms();
+    } catch (error) {
+      console.error(error);
+      toast("채팅방 생성 중 오류가 발생했습니다.");
+    }
+  }
+
+  function connectWebSocket() {
+    const socket = new SockJS("/ws");
+    stompClient = Stomp.over(socket);
+    stompClient.debug = null;
+
+    stompClient.connect(
+            {},
+            function () {
+              $("statusDot").classList.add("on");
+              $("statusText").textContent = "채팅 연결됨";
+              if (currentRoomId) subscribeRoom(currentRoomId);
+            },
+            function () {
+              $("statusDot").classList.remove("on");
+              $("statusText").textContent = "채팅 대기 중";
+              setTimeout(connectWebSocket, 4000);
+            }
+    );
+  }
+
+  async function selectRoom(roomId, roomName) {
+    currentRoomId = roomId;
+    $("chatRoomTitle").textContent = roomName;
+    $("chatRoomSubtitle").textContent = "익명으로 대화가 이어지는 공간입니다.";
+
+    await loadRooms();
+    await loadMessages(roomId);
+
+    if (stompClient && stompClient.connected) {
+      subscribeRoom(roomId);
+      $("messageInput").disabled = false;
+      $("sendButton").disabled = false;
+      $("messageInput").focus();
+    } else {
+      toast("채팅 연결을 준비하고 있습니다.");
+    }
+  }
+
+  function subscribeRoom(roomId) {
+    if (currentSubscription) currentSubscription.unsubscribe();
+
+    currentSubscription = stompClient.subscribe(`/sub/chat/${roomId}`, function(message) {
+      appendMessage(JSON.parse(message.body));
+    });
+  }
+
+  async function loadMessages(roomId) {
+    $("messages").innerHTML = `<div class="empty">대화를 불러오는 중입니다.</div>`;
+
+    try {
+      const response = await fetch(`${API.rooms}/${roomId}/messages?size=50`);
+      if (!response.ok) {
+        $("messages").innerHTML = `<div class="empty">아직 대화가 없습니다.</div>`;
+        return;
+      }
+
+      const list = await response.json();
+      $("messages").innerHTML = "";
+
+      if (!list || list.length === 0) {
+        $("messages").innerHTML = `<div class="empty">아직 대화가 없습니다.</div>`;
+        return;
+      }
+
+      list.sort((a,b) => new Date(a.createdAt) - new Date(b.createdAt));
+      list.forEach(appendMessage);
+    } catch (error) {
+      console.error(error);
+      $("messages").innerHTML = `<div class="empty">대화를 불러오지 못했습니다.</div>`;
+    }
+  }
+
+  function sendMessage(event) {
+    event.preventDefault();
+
+    const content = $("messageInput").value.trim();
+
+    if (!currentRoomId) {
+      toast("채팅방을 선택해주세요.");
+      return;
+    }
+    if (!stompClient || !stompClient.connected) {
+      toast("채팅 연결을 준비하고 있습니다.");
+      return;
+    }
+    if (!content) return;
+
+    stompClient.send("/pub/chat.send", {}, JSON.stringify({
+      roomId: currentRoomId,
+      sender: getNickname(),
+      content
+    }));
+
+    $("messageInput").value = "";
+    $("messageInput").focus();
+  }
+
+  function appendMessage(data) {
+    const empty = $("messages").querySelector(".empty");
+    if (empty) empty.remove();
+
+    const sender = data.sender || data.senderName || "익명";
+    const content = data.content || "";
+    const isMe = sender === getNickname();
+
+    const item = document.createElement("div");
+    item.className = `message ${isMe ? "me" : ""}`;
+    item.innerHTML = `
+        <div class="message-sender">${escapeHtml(sender)}</div>
+        <div class="bubble">${escapeHtml(content)}</div>
+        <div class="message-time">${formatTime(data.createdAt)}</div>
+      `;
+
+    $("messages").appendChild(item);
+    $("messages").scrollTop = $("messages").scrollHeight;
+  }
+
+  async function readResponse(response) {
+    const text = await response.text();
+    try { return text ? JSON.parse(text) : {}; }
+    catch { return { token: text }; }
+  }
+
+  function getTokenFromResponse(data) {
+    return data.bearerToken || data.token || data.accessToken || data.data?.bearerToken || data.data?.token || data.data?.accessToken || "";
+  }
+
+  function parseJwt(rawToken) {
+    if (!rawToken) return null;
+    try {
+      const jwt = rawToken.startsWith("Bearer ") ? rawToken.substring(7) : rawToken;
+      const payload = jwt.split(".")[1];
+      const json = decodeURIComponent(atob(payload.replace(/-/g, "+").replace(/_/g, "/")).split("").map(c => {
+        return "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2);
+      }).join(""));
+      return JSON.parse(json);
+    } catch {
+      return null;
+    }
+  }
+
+  function normalizeList(data) {
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data?.content)) return data.content;
+    if (Array.isArray(data?.data)) return data.data;
+    if (Array.isArray(data?.data?.content)) return data.data.content;
+    return [];
+  }
+
+  function formatTime(value) {
+    const date = value ? new Date(value) : new Date();
+    if (isNaN(date.getTime())) return "";
+    return date.toLocaleTimeString("ko-KR", { hour:"2-digit", minute:"2-digit" });
+  }
+
+  function formatDate(value) {
+    const date = new Date(value);
+    if (isNaN(date.getTime())) return value;
+    return date.toLocaleDateString("ko-KR", { month:"2-digit", day:"2-digit" });
+  }
+
+  function escapeHtml(value) {
+    const div = document.createElement("div");
+    div.textContent = value ?? "";
+    return div.innerHTML;
+  }
+
+  function escapeAttr(value) {
+    return String(value ?? "").replaceAll("\\","\\\\").replaceAll("'","\\'").replaceAll('"',"&quot;");
+  }
+
+  let toastTimer = null;
+  function toast(message) {
+    const el = $("toast");
+    el.textContent = message;
+    el.classList.add("show");
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove("show"), 2300);
+  }
+</script>
+</body>
+</html>
