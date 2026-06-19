@@ -24,6 +24,13 @@ public class SecurityConfig {
 
     private final JwtUtil jwtUtil;
 
+    /**
+     * 익명 채팅과 SockJS 연결에 필요한 진입점은 JWT 필터보다 앞에서 열어둔다.
+     * <p>
+     * /ws/** 는 SockJS가 연결 준비 중 /ws/info 같은 하위 요청을 만들기 때문에 허용이 필요하고,
+     * /api/chat/** 는 익명 채팅 요구사항 때문에 인증 없이 접근 가능해야 한다.
+     * /error 는 내부 예외 발생 후 Spring Boot가 이동하는 경로이므로 Security 차단 대상에서 제외한다.
+     */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http, ObjectMapper objectMapper) throws Exception {
         return http
