@@ -11,6 +11,9 @@ import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 
+/**
+ * /pub 으로 들어온 STOMP 메시지를 채팅방별 /sub 구독 채널로 이어주는 WebSocket 진입점이다.
+ */
 @Controller
 @RequiredArgsConstructor
 public class ChatController {
@@ -19,6 +22,12 @@ public class ChatController {
     private final ChatMessageRepository chatMessageRepository;
     private final SimpMessagingTemplate messagingTemplate;
 
+    /**
+     * 채팅 메시지는 영속화된 상태를 기준으로 모든 참여자에게 동일하게 전달되도록
+     * DB 저장 후 해당 채팅방 구독자에게 브로드캐스트한다.
+     *
+     * @param dto 메시지를 보낼 채팅방 식별자, 발신자 이름, 메시지 내용을 담은 값
+     */
     @MessageMapping("/chat.send")
     public void send(ChatMessageDto dto) {
         ChatRoom chatRoom = chatRoomRepository.findById(dto.getRoomId()).orElseThrow(

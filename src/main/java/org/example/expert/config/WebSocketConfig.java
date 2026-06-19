@@ -10,6 +10,10 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 @EnableWebSocketMessageBroker
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
+    /**
+     * STOMP 경로를 발행과 구독으로 분리해 클라이언트가 서버로 메시지를 보낼 때는 /pub,
+     * 서버 메시지를 받을 때는 /sub 아래 채널을 구독하도록 고정한다.
+     */
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
         registry.enableSimpleBroker("/sub");

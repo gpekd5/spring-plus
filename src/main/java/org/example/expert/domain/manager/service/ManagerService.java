@@ -23,6 +23,9 @@ import org.springframework.util.ObjectUtils;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * 할일 작성자만 담당자를 관리할 수 있도록 검증하고 담당자 변경 이력을 남긴다.
+ */
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -33,6 +36,15 @@ public class ManagerService {
     private final TodoRepository todoRepository;
     private final ManagerLogService managerLogService;
 
+    /**
+     * 할일 작성자 검증, 담당자 대상 검증, 자기 자신 등록 방지를 통과한 경우 담당자를 등록한다.
+     * 성공과 실패 모두 운영 추적을 위해 별도 로그 트랜잭션으로 기록한다.
+     *
+     * @param authUser 담당자 등록을 요청한 현재 사용자 식별 정보
+     * @param todoId 담당자를 등록할 할일 식별자
+     * @param managerSaveRequest 담당자로 등록할 사용자 식별자
+     * @return 등록된 담당자와 사용자 정보를 담은 응답
+     */
     @Transactional
     public ManagerSaveResponse saveManager(AuthUser authUser, long todoId, ManagerSaveRequest managerSaveRequest) {
         // 일정을 만든 유저
@@ -83,6 +95,12 @@ public class ManagerService {
         }
     }
 
+    /**
+     * 할일 존재 여부를 확인한 뒤 담당자 목록을 사용자 정보와 함께 응답 형태로 변환한다.
+     *
+     * @param todoId 담당자 목록을 조회할 할일 식별자
+     * @return 해당 할일에 등록된 담당자와 사용자 정보 목록
+     */
     public List<ManagerResponse> getManagers(long todoId) {
         Todo todo = todoRepository.findById(todoId)
                 .orElseThrow(() -> new InvalidRequestException("Todo not found"));
@@ -100,6 +118,13 @@ public class ManagerService {
         return dtoList;
     }
 
+    /**
+     * 할일 작성자만 담당자 등록을 삭제할 수 있도록 소유자와 할일-담당자 연결을 함께 검증한다.
+     *
+     * @param authUser 담당자 삭제를 요청한 현재 사용자 식별 정보
+     * @param todoId 담당자 등록이 속한 할일 식별자
+     * @param managerId 삭제할 담당자 등록 식별자
+     */
     @Transactional
     public void deleteManager(AuthUser authUser, long todoId, long managerId) {
         User user = User.fromAuthUser(authUser);
